@@ -1,10 +1,9 @@
-from typing import Any, Dict, List, Optional, Mapping, Type
+from typing import Any, Dict, List, Optional, Mapping
+from pathlib import Path
 import logging
 import json
-import requests
 
 from langchain.chat_models.base import BaseChatModel
-from langchain.pydantic_v1 import root_validator, Field
 from langchain.utils import (
     get_pydantic_field_names,
 )
@@ -18,14 +17,7 @@ from langchain.schema import (
     SystemMessage,
 )
 from langchain.callbacks.manager import CallbackManagerForLLMRun
-from langchain.schema.messages import (
-    AIMessageChunk,
-    BaseMessageChunk,
-    ChatMessageChunk,
-    HumanMessageChunk,
-    SystemMessageChunk,
-)
-from wasm_chat import WasmChat, Metadata
+from wasm_chat import WasmChat, Metadata, PromptTemplateType
 
 logger = logging.getLogger(__name__)
 
@@ -63,66 +55,44 @@ class ChatWasm(BaseChatModel):
 
     wasm_chat: Optional[WasmChat] = None
     """WasmChat instance"""
-    request_timeout: int = 60
-    """request timeout for chat http requests"""
-    llama_api_server_base: str = Field(default=DEFAULT_API_SERVER_BASE)
-    """Llama-api-server custom endpoints"""
+    model_file: Optional[str] = None
+    """Path to gguf model file."""
+    wasm_file: Optional[str] = None
+    """Path to wasm file."""
+    prompt_template: Optional[PromptTemplateType] = None
+    """Prompt template to use for generating prompts."""
+    model: Optional[str] = None
+    """Name of gguf model."""
 
-    model = "llama-2-7b"
-    """model name, default is `llama-2-7b`."""
-    temperature: float = 0.3
-    """What sampling temperature to use."""
-    top_k: int = 5
-    """What search sampling control to use."""
-    top_p: float = 0.85
-    """Whether to use search enhance, default is False."""
-    streaming: bool = False
-    """Whether to stream the results or not."""
-    model_kwargs: Dict[str, Any] = Field(default_factory=dict)
-    """Holds any model parameters valid for API call not explicitly specified."""
+    ctx_size: int = 4096
+    """Size of the prompt context, default is 4096."""
+    n_predict: int = 1024
+    """Number of tokens to predict, default is 1024."""
+    n_gpu_layers: int = 100
+    """Number of layers to run on GPU, default is 100."""
+    batch_size: int = 4096
+    """Batch size for prompt processing, default is 4096."""
+    reverse_prompt: Optional[str] = None
+    """Halt generation at PROMPT, return control. Default is None."""
 
     class Config:
         """Configuration for this pydantic object."""
 
         allow_population_by_field_name = True
 
-    @root_validator(pre=True)
-    def build_extra(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Build extra kwargs from additional params that were passed in."""
-        all_required_field_names = get_pydantic_field_names(cls)
-        extra = values.get("model_kwargs", {})
-        for field_name in list(values):
-            if field_name in extra:
-                raise ValueError(f"Found {field_name} supplied twice.")
-            if field_name not in all_required_field_names:
-                logger.warning(
-                    f"""WARNING! {field_name} is not default parameter.
-                    {field_name} was transferred to model_kwargs.
-                    Please confirm that {field_name} is what you intended."""
-                )
-                extra[field_name] = values.pop(field_name)
-
-        invalid_model_kwargs = all_required_field_names.intersection(extra.keys())
-        if invalid_model_kwargs:
-            raise ValueError(
-                f"Parameters {invalid_model_kwargs} should be specified explicitly. "
-                f"Instead they were passed in as part of `model_kwargs` parameter."
-            )
-
-        values["model_kwargs"] = extra
-        return values
-
     @property
-    def _default_params(self) -> Dict[str, Any]:
+    def _default_metadata(self) -> Dict[str, Any]:
         """Get the default parameters for calling Baichuan API."""
+
         normal_params = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "top_p": self.top_p,
-            "top_k": self.top_k,
+            "ctx_size": self.ctx_size,
+            "n_predict": self.n_predict,
+            "n_gpu_layers": self.n_gpu_layers,
+            "batch_size": self.batch_size,
+            "reverse_prompt": self.reverse_prompt,
         }
 
-        return {**normal_params, **self.model_kwargs}
+        return {**normal_params}
 
     def _generate(
         self,
@@ -135,54 +105,37 @@ class ChatWasm(BaseChatModel):
         return res
 
     def _chat(self, messages: List[BaseMessage], **kwargs: Any) -> ChatResult:
-        # parameters = {**self._default_params, **kwargs}
-
-        # model = parameters.pop("model")
-        # headers = parameters.pop("headers", {})
-
-        # payload = {
-        #     "model": model,
-        #     "messages": [_convert_message_to_dict(m) for m in messages],
-        # }
-
-        # url = f"{self.llama_api_server_base}/v1/chat/completions"
-        # res = requests.post(
-        #     url=url,
-        #     timeout=self.request_timeout,
-        #     headers={
-        #         "accept": "application/json",
-        #         "Content-Type": "application/json",
-        #         **headers,
-        #     },
-        #     data=json.dumps(payload),
-        # )
-
         # init wasm environment
         if self.wasm_chat is None:
-            model_file = "/Volumes/Dev/secondstate/me/pyo3/wasm-chat/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
-            model_alias = "default"
-            wasm_file = "/Volumes/Dev/secondstate/me/wasm-llm/target/wasm32-wasi/release/inference.wasm"
-            dir_mapping = ".:."
+            # set the 'model' field
+            model_file = Path(self.model_file).resolve()
+            self.model = model_file.stem
+
+            # set metadata
+            parameters = {**self._default_metadata, **kwargs}
+            metadata = Metadata(**parameters)
 
             # create WasmChat instance
-            self.wasm_chat = WasmChat(model_file, model_alias, wasm_file, dir_mapping)
-
-            metadata = Metadata()
-            print(f"log_enable: {metadata.log_enable}")
-            print(f"reverse_prompt: {metadata.reverse_prompt}")
+            self.wasm_chat = WasmChat(
+                self.model_file,
+                self.wasm_file,
+                self.prompt_template,
+            )
 
             # init inference context
-            self.wasm_chat.init_inference_context(model_alias, metadata)
+            self.wasm_chat.init_inference_context(metadata)
 
-        prompt = """<|im_start|>system
-            Answer as concisely as possible.<|im_end|>
-            <|im_start|>user
-            What is the capital of France?<|im_end|>
-            <|im_start|>assistant"""
+        payload = {
+            "model": self.model,
+            "messages": [_convert_message_to_dict(m) for m in messages],
+        }
+        data = json.dumps(payload)
+
+        # generate prompt string
+        prompt = self.wasm_chat.generate_prompt_str(data)
 
         # run inference
-        assistant_message = self.wasm_chat.infer(prompt)
-        print(f"[Answer] {assistant_message}")
+        ai_message = self.wasm_chat.infer(prompt)
 
         token_usage = {
             "prompt_tokens": 1,
@@ -191,17 +144,9 @@ class ChatWasm(BaseChatModel):
         }
 
         # create ChatResult
-        generations = [ChatGeneration(message=AIMessage(content=assistant_message))]
+        generations = [ChatGeneration(message=AIMessage(content=ai_message))]
         llm_output = {"token_usage": token_usage, "model": self.model}
         return ChatResult(generations=generations, llm_output=llm_output)
-
-    # def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
-    #     message = _convert_dict_to_message(response.get("choices")[0].get("message"))
-    #     generations = [ChatGeneration(message=message)]
-
-    #     token_usage = response["usage"]
-    #     llm_output = {"token_usage": token_usage, "model": self.model}
-    #     return ChatResult(generations=generations, llm_output=llm_output)
 
     def _create_chat_result(
         self, message: str, token_usage: Mapping[str, Any]
