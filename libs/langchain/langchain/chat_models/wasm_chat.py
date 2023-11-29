@@ -116,11 +116,17 @@ class ChatWasm(BaseChatModel):
             metadata = Metadata(**parameters)
 
             # create WasmChat instance
-            self.wasm_chat = WasmChat(
-                self.model_file,
-                self.wasm_file,
-                self.prompt_template,
-            )
+            if self.wasm_file is None:
+                self.wasm_chat = WasmChat(
+                    self.model_file,
+                    self.prompt_template,
+                )
+            else:
+                self.wasm_chat = WasmChat(
+                    self.model_file,
+                    self.prompt_template,
+                    self.wasm_file,
+                )
 
             # init inference context
             self.wasm_chat.init_inference_context(metadata)
