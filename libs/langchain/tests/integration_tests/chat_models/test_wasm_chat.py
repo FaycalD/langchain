@@ -1,7 +1,7 @@
 from langchain.chat_models.wasm_chat import (
-    WasmChatLocal,
+    ChatWasmLocal,
     PromptTemplateType,
-    WasmChatService,
+    ChatWasmService,
 )
 from langchain.schema.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -12,7 +12,7 @@ import os
 def test_chat_wasm() -> None:
     model_file = "/Volumes/Store/models/gguf/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
 
-    chat = WasmChatLocal(
+    chat = ChatWasmLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
     )
@@ -30,7 +30,7 @@ def test_chat_wasm_with_wasm_file() -> None:
     home_dir = os.getenv("HOME")
     wasm_file = f"{home_dir}/.wasmedge/wasm/wasm_infer.wasm"
 
-    chat = WasmChatLocal(
+    chat = ChatWasmLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
         wasm_file=wasm_file,
@@ -47,7 +47,7 @@ def test_chat_wasm_with_wasm_file() -> None:
 def test_chat_wasm_with_reverse_prompt() -> None:
     model_file = "/Volumes/Store/models/gguf/mistrallite.Q5_K_M.gguf"
 
-    chat = WasmChatLocal(
+    chat = ChatWasmLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.MistralLite,
         reverse_prompt="</s>",
@@ -64,7 +64,7 @@ def test_chat_wasm_with_reverse_prompt() -> None:
 
 @pytest.mark.enable_socket
 def test_chat_wasmedge() -> None:
-    chat = WasmChatService(service_ip_addr="50.112.58.64", service_port="8080")
+    chat = ChatWasmService(service_ip_addr="50.112.58.64", service_port="8080")
     system_message = SystemMessage(content="You are an AI assistant")
     user_message = HumanMessage(content="What is the capital of France?")
     messages = [system_message, user_message]
@@ -76,7 +76,7 @@ def test_chat_wasmedge() -> None:
 
 @pytest.mark.enable_socket
 def test_chat_service_default_url() -> None:
-    chat = WasmChatService()
+    chat = ChatWasmService()
     system_message = SystemMessage(content="You are an AI assistant")
     user_message = HumanMessage(content="What is the capital of France?")
     messages = [system_message, user_message]

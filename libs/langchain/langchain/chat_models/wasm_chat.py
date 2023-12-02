@@ -51,7 +51,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     return message_dict
 
 
-class WasmChatLocal(BaseChatModel):
+class ChatWasmLocal(BaseChatModel):
     """Chat with LLMs locally"""
 
     wasm_chat: Optional[WasmChat] = None
@@ -168,7 +168,7 @@ class WasmChatLocal(BaseChatModel):
         return "wasmedge-chat"
 
 
-class WasmChatService(BaseChatModel):
+class ChatWasmService(BaseChatModel):
     """Chat with LLMs via `llama-api-server`
 
     For the information about `llama-api-server`, visit https://github.com/second-state/llama-utils
