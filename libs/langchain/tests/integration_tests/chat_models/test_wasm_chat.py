@@ -1,5 +1,11 @@
-from langchain.chat_models.wasm_chat import ChatWasm, PromptTemplateType
+from langchain.chat_models.wasm_chat import (
+    WasmChat,
+    PromptTemplateType,
+    WasmChatService,
+)
 from langchain.schema.messages import AIMessage, HumanMessage, SystemMessage
+
+import pytest
 
 
 def test_chat_wasm() -> None:
@@ -7,7 +13,7 @@ def test_chat_wasm() -> None:
         "/home/ubuntu/workspace/wasm-llm/wasm-chat/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
     )
 
-    chat = ChatWasm(
+    chat = WasmChat(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
     )
@@ -26,7 +32,7 @@ def test_chat_wasm_with_wasm_file() -> None:
     )
     wasm_file = "/home/ubuntu/.wasmedge/wasm/wasm_infer.wasm"
 
-    chat = ChatWasm(
+    chat = WasmChat(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
         wasm_file=wasm_file,
@@ -43,7 +49,7 @@ def test_chat_wasm_with_wasm_file() -> None:
 def test_chat_wasm_with_reverse_prompt() -> None:
     model_file = "/home/ubuntu/workspace/models/second-state/MistralLite-7B-GGUF/mistrallite.Q5_K_M.gguf"
 
-    chat = ChatWasm(
+    chat = WasmChat(
         model_file=model_file,
         prompt_template=PromptTemplateType.MistralLite,
         reverse_prompt="</s>",
@@ -56,3 +62,26 @@ def test_chat_wasm_with_reverse_prompt() -> None:
     assert isinstance(chat_result, AIMessage)
     assert isinstance(chat_result.content, str)
     assert "Paris" in chat_result.content
+
+
+@pytest.mark.enable_socket
+def test_chat_wasmedge() -> None:
+    chat = WasmChatService(service_ip_addr="50.112.58.64", service_port="8080")
+    system_message = SystemMessage(content="You are an AI assistant")
+    user_message = HumanMessage(content="What is the capital of France?")
+    messages = [system_message, user_message]
+    response = chat(messages)
+    assert isinstance(response, AIMessage)
+    assert isinstance(response.content, str)
+    assert "Paris" in response.content
+
+
+@pytest.mark.enable_socket
+def test_chat_service_default_url() -> None:
+    chat = WasmChatService()
+    system_message = SystemMessage(content="You are an AI assistant")
+    user_message = HumanMessage(content="What is the capital of France?")
+    messages = [system_message, user_message]
+
+    with pytest.raises(ValueError, match="Error code: 502, reason: Bad Gateway"):
+        response = chat(messages)

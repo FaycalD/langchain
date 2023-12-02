@@ -2,7 +2,9 @@ from typing import Any, Dict, List, Optional, Mapping
 from pathlib import Path
 import logging
 import json
+import requests
 
+from langchain.pydantic_v1 import root_validator, Field
 from langchain.chat_models.base import BaseChatModel
 from langchain.utils import (
     get_pydantic_field_names,
@@ -19,9 +21,8 @@ from langchain.schema import (
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from wasm_chat import WasmChat, Metadata, PromptTemplateType
 
-logger = logging.getLogger(__name__)
 
-DEFAULT_API_SERVER_BASE = "http://localhost:10889"
+logger = logging.getLogger(__name__)
 
 
 def _convert_dict_to_message(_dict: Mapping[str, Any]) -> BaseMessage:
@@ -50,8 +51,8 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     return message_dict
 
 
-class ChatWasm(BaseChatModel):
-    """WasmEdge locally runs large language models."""
+class WasmChat(BaseChatModel):
+    """Chat with LLMs locally"""
 
     wasm_chat: Optional[WasmChat] = None
     """WasmChat instance"""
@@ -159,6 +160,112 @@ class ChatWasm(BaseChatModel):
     ) -> ChatResult:
         generations = [ChatGeneration(message=AIMessage(content=message))]
 
+        llm_output = {"token_usage": token_usage, "model": self.model}
+        return ChatResult(generations=generations, llm_output=llm_output)
+
+    @property
+    def _llm_type(self) -> str:
+        return "wasmedge-chat"
+
+
+class WasmChatService(BaseChatModel):
+    """Chat with LLMs via `llama-api-server`
+
+    For the information about `llama-api-server`, visit https://github.com/second-state/llama-utils
+    """
+
+    request_timeout: int = 60
+    """request timeout for chat http requests"""
+    service_url: Optional[str] = None
+    """URL of WasmChat service"""
+    service_ip_addr: Optional[str] = "0.0.0.0"
+    """IP Address of WasmChat service"""
+    service_port: Optional[str] = "8080"
+    """Port of WasmChat service"""
+    model: str = "NA"
+    """model name, default is `NA`."""
+
+    class Config:
+        """Configuration for this pydantic object."""
+
+        allow_population_by_field_name = True
+
+    @root_validator(pre=True)
+    def build_extra(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Build extra kwargs from additional params that were passed in."""
+        all_required_field_names = get_pydantic_field_names(cls)
+        extra = values.get("model_kwargs", {})
+        for field_name in list(values):
+            if field_name in extra:
+                raise ValueError(f"Found {field_name} supplied twice.")
+            if field_name not in all_required_field_names:
+                logger.warning(
+                    f"""WARNING! {field_name} is not default parameter.
+                    {field_name} was transferred to model_kwargs.
+                    Please confirm that {field_name} is what you intended."""
+                )
+                extra[field_name] = values.pop(field_name)
+
+        invalid_model_kwargs = all_required_field_names.intersection(extra.keys())
+        if invalid_model_kwargs:
+            raise ValueError(
+                f"Parameters {invalid_model_kwargs} should be specified explicitly. "
+                f"Instead they were passed in as part of `model_kwargs` parameter."
+            )
+
+        values["model_kwargs"] = extra
+        return values
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        res = self._chat(messages, **kwargs)
+
+        if res.status_code != 200:
+            raise ValueError(f"Error code: {res.status_code}, reason: {res.reason}")
+
+        response = res.json()
+
+        return self._create_chat_result(response)
+
+    def _chat(self, messages: List[BaseMessage], **kwargs: Any) -> requests.Response:
+        if self.service_url is None:
+            if self.service_ip_addr is None or self.service_port is None:
+                res = requests.models.Response()
+                res.status_code = 503
+                res.reason = "The IP address or port of the chat service is incorrect."
+                return res
+
+            self.service_url = (
+                f"http://{self.service_ip_addr}:{self.service_port}/v1/chat/completions"
+            )
+
+        payload = {
+            "model": self.model,
+            "messages": [_convert_message_to_dict(m) for m in messages],
+        }
+
+        res = requests.post(
+            url=self.service_url,
+            timeout=self.request_timeout,
+            headers={
+                "accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps(payload),
+        )
+
+        return res
+
+    def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
+        message = _convert_dict_to_message(response.get("choices")[0].get("message"))
+        generations = [ChatGeneration(message=message)]
+
+        token_usage = response["usage"]
         llm_output = {"token_usage": token_usage, "model": self.model}
         return ChatResult(generations=generations, llm_output=llm_output)
 
