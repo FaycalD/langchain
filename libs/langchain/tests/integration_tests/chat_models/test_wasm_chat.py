@@ -1,19 +1,18 @@
 from langchain.chat_models.wasm_chat import (
-    WasmChat,
+    WasmChatLocal,
     PromptTemplateType,
     WasmChatService,
 )
 from langchain.schema.messages import AIMessage, HumanMessage, SystemMessage
 
 import pytest
+import os
 
 
 def test_chat_wasm() -> None:
-    model_file = (
-        "/home/ubuntu/workspace/wasm-llm/wasm-chat/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
-    )
+    model_file = "/Volumes/Store/models/gguf/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
 
-    chat = WasmChat(
+    chat = WasmChatLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
     )
@@ -27,12 +26,11 @@ def test_chat_wasm() -> None:
 
 
 def test_chat_wasm_with_wasm_file() -> None:
-    model_file = (
-        "/home/ubuntu/workspace/wasm-llm/wasm-chat/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
-    )
-    wasm_file = "/home/ubuntu/.wasmedge/wasm/wasm_infer.wasm"
+    model_file = "/Volumes/Store/models/gguf/tinyllama-1.1b-chat-v0.3.Q5_K_M.gguf"
+    home_dir = os.getenv("HOME")
+    wasm_file = f"{home_dir}/.wasmedge/wasm/wasm_infer.wasm"
 
-    chat = WasmChat(
+    chat = WasmChatLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.ChatML,
         wasm_file=wasm_file,
@@ -47,9 +45,9 @@ def test_chat_wasm_with_wasm_file() -> None:
 
 
 def test_chat_wasm_with_reverse_prompt() -> None:
-    model_file = "/home/ubuntu/workspace/models/second-state/MistralLite-7B-GGUF/mistrallite.Q5_K_M.gguf"
+    model_file = "/Volumes/Store/models/gguf/mistrallite.Q5_K_M.gguf"
 
-    chat = WasmChat(
+    chat = WasmChatLocal(
         model_file=model_file,
         prompt_template=PromptTemplateType.MistralLite,
         reverse_prompt="</s>",

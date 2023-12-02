@@ -51,7 +51,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
     return message_dict
 
 
-class WasmChat(BaseChatModel):
+class WasmChatLocal(BaseChatModel):
     """Chat with LLMs locally"""
 
     wasm_chat: Optional[WasmChat] = None
