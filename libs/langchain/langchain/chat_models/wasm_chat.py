@@ -1,14 +1,14 @@
-from typing import Any, Dict, List, Optional, Mapping
-from pathlib import Path
-import logging
 import json
-import requests
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional
 
-from langchain.pydantic_v1 import root_validator, Field
+import requests
+from wasm_chat import Metadata, PromptTemplateType, WasmChat
+
+from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
-from langchain.utils import (
-    get_pydantic_field_names,
-)
+from langchain.pydantic_v1 import root_validator
 from langchain.schema import (
     AIMessage,
     BaseMessage,
@@ -18,9 +18,7 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage,
 )
-from langchain.callbacks.manager import CallbackManagerForLLMRun
-from wasm_chat import WasmChat, Metadata, PromptTemplateType
-
+from langchain.utils import get_pydantic_field_names
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +107,8 @@ class ChatWasmLocal(BaseChatModel):
         # init wasm environment
         if self.wasm_chat is None:
             # set the 'model' field
-            model_file = Path(self.model_file).resolve()
+            model: str = self.model_file if self.model_file is not None else ""
+            model_file = Path(model).resolve()
             self.model = model_file.stem
 
             # set metadata
@@ -262,7 +261,7 @@ class ChatWasmService(BaseChatModel):
         return res
 
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
-        message = _convert_dict_to_message(response.get("choices")[0].get("message"))
+        message = _convert_dict_to_message(response["choices"][0].get("message"))
         generations = [ChatGeneration(message=message)]
 
         token_usage = response["usage"]
