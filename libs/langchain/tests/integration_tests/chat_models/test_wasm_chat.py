@@ -19,7 +19,6 @@ curl -sSf https://raw.githubusercontent.com/second-state/wasm-llm/main/deploy.sh
 """
 
 import os
-import subprocess
 from urllib.request import urlretrieve
 
 import pytest
@@ -124,11 +123,8 @@ def test_chat_wasm_with_reverse_prompt() -> None:
 def test_chat_wasm_service() -> None:
     """This test requires the port 8080 is not occupied."""
 
-    # a test service
-    service_ip_addr = "0.0.0.0"
-    service_port = "8080"
-
-    chat = ChatWasmService(service_ip_addr=service_ip_addr, service_port=service_port)
+    service_url = "https://14cb-50-112-58-64.ngrok-free.app"
+    chat = ChatWasmService(service_url=service_url)
     system_message = SystemMessage(content="You are an AI assistant")
     user_message = HumanMessage(content="What is the capital of France?")
     messages = [system_message, user_message]

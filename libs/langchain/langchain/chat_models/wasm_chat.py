@@ -4,20 +4,29 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 import requests
+
+# from langchain.schema import (
+#     AIMessage,
+#     BaseMessage,
+#     ChatGeneration,
+#     ChatMessage,
+#     ChatResult,
+#     HumanMessage,
+#     SystemMessage,
+# )
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    ChatMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatResult
 from wasm_chat import Metadata, PromptTemplateType, WasmChat
 
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
 from langchain.pydantic_v1 import root_validator
-from langchain.schema import (
-    AIMessage,
-    BaseMessage,
-    ChatGeneration,
-    ChatMessage,
-    ChatResult,
-    HumanMessage,
-    SystemMessage,
-)
 from langchain.utils import get_pydantic_field_names
 
 logger = logging.getLogger(__name__)
@@ -177,10 +186,6 @@ class ChatWasmService(BaseChatModel):
     """request timeout for chat http requests"""
     service_url: Optional[str] = None
     """URL of WasmChat service"""
-    service_ip_addr: Optional[str] = "0.0.0.0"
-    """IP Address of WasmChat service"""
-    service_port: Optional[str] = "8080"
-    """Port of WasmChat service"""
     model: str = "NA"
     """model name, default is `NA`."""
 
@@ -233,15 +238,12 @@ class ChatWasmService(BaseChatModel):
 
     def _chat(self, messages: List[BaseMessage], **kwargs: Any) -> requests.Response:
         if self.service_url is None:
-            if self.service_ip_addr is None or self.service_port is None:
-                res = requests.models.Response()
-                res.status_code = 503
-                res.reason = "The IP address or port of the chat service is incorrect."
-                return res
+            res = requests.models.Response()
+            res.status_code = 503
+            res.reason = "The IP address or port of the chat service is incorrect."
+            return res
 
-            self.service_url = (
-                f"http://{self.service_ip_addr}:{self.service_port}/v1/chat/completions"
-            )
+        service_url = f"{self.service_url}/v1/chat/completions"
 
         payload = {
             "model": self.model,
@@ -249,7 +251,7 @@ class ChatWasmService(BaseChatModel):
         }
 
         res = requests.post(
-            url=self.service_url,
+            url=service_url,
             timeout=self.request_timeout,
             headers={
                 "accept": "application/json",
