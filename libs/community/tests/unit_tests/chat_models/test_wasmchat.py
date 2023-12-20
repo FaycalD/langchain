@@ -1,15 +1,16 @@
 import pytest
-from langchain_community.chat_models.wasm_chat import (
-    WasmChatService,
-    _convert_dict_to_message,
-    _convert_message_to_dict,
-)
 from langchain_core.messages import (
     AIMessage,
     ChatMessage,
     FunctionMessage,
     HumanMessage,
     SystemMessage,
+)
+
+from langchain_community.chat_models.wasm_chat import (
+    WasmChatService,
+    _convert_dict_to_message,
+    _convert_message_to_dict,
 )
 
 
